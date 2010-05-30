@@ -36,9 +36,9 @@
 # Add source files here
 EXECUTABLE	:= raytracer
 # Cuda source files (compiled with cudacc)
-CUFILES		:= raytracer_kernel.cu
+CUFILES		:= raytracer_kernel.cu raytracer.cu
 # C/C++ source files (compiled with gcc / c++)
-CCFILES		:= raytracer.cpp
+CCFILES		:= 
 # Additional libraries needed by the project
 USEGLLIB	:= 1
 USEGLUT		:= 1

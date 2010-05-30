@@ -3,9 +3,6 @@
 #include <GL/gl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <iostream>
-
-using namespace std;
 
 #define WINDOW_WIDTH  512
 #define WINDOW_HEIGHT 512
