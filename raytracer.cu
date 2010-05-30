@@ -6,6 +6,7 @@
 #include <cutil_inline.h>
 #include <cuda_gl_interop.h>
 #include <assert.h>
+#include <math.h>
 
 #include "raytracer.h"
 
@@ -14,6 +15,8 @@
 
 // Handle to the pixel buffer object to write to the screen
 GLuint pbo = 0;
+
+float vFov = M_PI / 3;
 
 // Function to update the pixels with new samples from the raytracer
 void updatePixels()
@@ -30,11 +33,33 @@ void updatePixels()
     dim3 gridDim(WINDOW_WIDTH * WINDOW_HEIGHT / numPixelsPerBlock);
     dim3 blockDim(numPixelsPerBlock);
 
-    raytrace<<<gridDim, blockDim>>>(d_out, WINDOW_WIDTH, WINDOW_HEIGHT);
+    raytrace<<<gridDim, blockDim>>>(d_out, WINDOW_WIDTH, WINDOW_HEIGHT, vFov);
 
     CUT_CHECK_ERROR("Kernel execution failed");
 
     cutilSafeCall(cudaGLUnmapBufferObject(pbo));
+}
+ 
+void keyboard(unsigned char key, int x, int y)
+{
+    switch(key)
+    {
+        case '=':
+        {    
+            vFov *= .95;
+            if (vFov < .1)
+                vFov = .1;
+            printf("Vertical FOV:%f\n", vFov);
+        } break;
+        case '-':
+        {
+            vFov /= .95;
+            if (vFov > M_PI - .01)
+                vFov = M_PI - .01;
+            printf("Vertical FOV:%f\n", vFov);
+        }break;
+    }
+
 }
 
 
@@ -95,6 +120,7 @@ int main(int argc, char** argv)
     glutCreateWindow("CUDA raytracer");
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
+    glutKeyboardFunc(keyboard);
     glutIdleFunc(idle);
 
     glewInit();
