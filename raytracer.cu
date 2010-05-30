@@ -3,12 +3,37 @@
 #include <GL/gl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <cutil_inline.h>
+#include <cuda_gl_interop.h>
+
+#include "raytracer.h"
 
 #define WINDOW_WIDTH  512
 #define WINDOW_HEIGHT 512
 
 // Handle to the pixel buffer object to write to the screen
-GLuint pbo = 0; 
+GLuint pbo = 0;
+
+// Function to update the pixels with new samples from the raytracer
+void updatePixels()
+{
+    unsigned char * d_out;
+
+    // Map the buffer object to some pointer to pass in
+    cutilSafeCall(cudaGLMapBufferObject((void**)&d_out, pbo));
+
+    // Set up the grid to get a thread per pixel
+    int numPixelsPerBlock = 64;
+    dim3 gridDim(WINDOW_WIDTH * WINDOW_HEIGHT / numPixelsPerBlock);
+    dim3 blockDim(numPixelsPerBlock);
+
+    raytrace<<<gridDim, blockDim>>>(d_out, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+    CUT_CHECK_ERROR("Kernel execution failed");
+
+    cutilSafeCall(cudaGLUnmapBufferObject(pbo));
+}
+
 
 void cleanup()
 {
@@ -30,6 +55,9 @@ void reshape(int x, int y)
 // display results using OpenGL (called by GLUT)
 void display()
 {
+    // Update the pbo
+    updatePixels();
+
     // display results
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -77,6 +105,7 @@ int main(int argc, char** argv)
     glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
     glBufferDataARB(GL_PIXEL_UNPACK_BUFFER_ARB, WINDOW_WIDTH*WINDOW_HEIGHT*sizeof(GLubyte)*4, 0, GL_STREAM_DRAW_ARB);
     glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
+    cutilSafeCall(cudaGLRegisterBufferObject(pbo));
 
     atexit(cleanup);
 
