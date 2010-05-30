@@ -5,11 +5,12 @@
 #include <stdlib.h>
 #include <cutil_inline.h>
 #include <cuda_gl_interop.h>
+#include <assert.h>
 
 #include "raytracer.h"
 
-#define WINDOW_WIDTH  512
-#define WINDOW_HEIGHT 512
+#define WINDOW_WIDTH  1024
+#define WINDOW_HEIGHT 1024
 
 // Handle to the pixel buffer object to write to the screen
 GLuint pbo = 0;
@@ -24,6 +25,8 @@ void updatePixels()
 
     // Set up the grid to get a thread per pixel
     int numPixelsPerBlock = 64;
+    assert(WINDOW_WIDTH % 64 == 0);
+
     dim3 gridDim(WINDOW_WIDTH * WINDOW_HEIGHT / numPixelsPerBlock);
     dim3 blockDim(numPixelsPerBlock);
 
