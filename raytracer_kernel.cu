@@ -6,6 +6,10 @@
 // Inifinity definition
 #define CUDA_INF __int_as_float(0x7f800000)
 
+
+// types of materials
+#define MATERIAL_DIFFUSE 1 // A perfectly diffuse material
+
 struct __align__(16) Sphere
 {
     float3 center;
@@ -14,6 +18,13 @@ struct __align__(16) Sphere
     // Emission values, assume that the sphere emits diffusely at all points
     float3 emissionCol;
 
+    int materialType;
+
+    // Proportion of light reflected when light approaches the point along
+    // the normal. For perfectly diffuse objects, this value represents the
+    // reflectance along all directions.
+    float3 reflectance;
+
 };
 
 struct Ray
@@ -21,6 +32,9 @@ struct Ray
     float3 o;
     float3 d;
 };
+
+// The maximum depth to go up to. This is hardcoded in compile time.
+#define MAX_DEPTH 5
 
 // Number of samples taken so far
 __constant__ uint d_sampleNum;
@@ -79,7 +93,8 @@ __device__ float rayIntersectSphere(Ray ray, float3 center, float radius)
 ///////////////////////////////////////////////////////////////////////////////
 // Return the nearest sphere index. If none intesect, -1 is returned
 ///////////////////////////////////////////////////////////////////////////////
-__device__ int nearestSphere(Ray r, Sphere * spheres, int numSpheres)
+__device__ int nearestSphere(Ray r, Sphere * spheres, int numSpheres,
+                             float3 * intersectP)
 {
     int best = -1;
     float dist = CUDA_INF; 
@@ -92,6 +107,7 @@ __device__ int nearestSphere(Ray r, Sphere * spheres, int numSpheres)
         {
             dist = thisDist;
             best = i;
+            *intersectP = r.o + dist * r.d;
         }
     }
 
@@ -112,6 +128,60 @@ __device__ void addSample(unsigned char * out, int i, uint4 sample)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Build a path, collecting light samples along the way. The depth traveled
+// is stored in depth.
+///////////////////////////////////////////////////////////////////////////////
+__device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
+                          uint2 * seeds, int * depth, float3 pathInf[])
+{
+    int dCount = 0; // How far the path is
+    int pathInfStep = 2 * blockDim.x;
+
+    while (dCount < MAX_DEPTH)
+    {
+        // Get the next sphere to hit
+        float3 p;
+        int next = nearestSphere(r, spheres, numSpheres, &p);
+
+        if (next == -1)
+            break;
+
+        // Store the next part, which is emission and reflectance.
+        // Note that the path inf array stores data for all threads in
+        // the block..., hence the wierd accessing.
+        //  
+        // For now, only 1 step emission is counted
+       // pathInf[pathInfStep * dCount + (i * 2)] = spheres[next].emissionCol; 
+        pathInf[(dCount * 2)] = spheres[next].emissionCol; 
+        dCount ++;
+        break;
+    }
+
+    *depth = dCount;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Combine the path information to get a sample
+//////////////////////////////////////////////////////////////////////////////
+__device__ float3 getSample(int i, int depth, float3 * pathInf)
+{
+    int pathInfStep = 2 * blockDim.x;
+
+    float3 sample = pathInf[0];
+    depth--;
+    while (depth > 0)
+    {
+      //  sample = pathInf[pathInfStep * depth + (i * 2)]
+      //            + pathInf[pathInfStep * depth + (i * 2) + 1] * sample;
+        sample = pathInf[depth * 2]
+                  + pathInf[depth * 2 + 1] * sample;
+        depth --;
+    }
+
+    return sample;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // The kernel function to handle one pass of the raytracer
 ///////////////////////////////////////////////////////////////////////////////
 __global__  void raytrace(unsigned char * out, int width, int height,
@@ -119,7 +189,8 @@ __global__  void raytrace(unsigned char * out, int width, int height,
                           uint2 * seeds)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-        
+    
+ 
     // Get the random seed for this pixel
     uint2 seed = seeds[i];
 
@@ -139,21 +210,17 @@ __global__  void raytrace(unsigned char * out, int width, int height,
     r.o = make_float3(0);
     r.d = normalize(make_float3(x, y, 1.0));
 
-    int nearest = nearestSphere(r, spheres, numSpheres);
+    // Recursively build up a path and store necessary light information
+    float3 pathInf[2 * MAX_DEPTH];
+    int depth;
+    buildPath(i, r, spheres, numSpheres, seeds, &depth, pathInf); 
 
-    if (nearest != -1)
-    {
-        addSample(out, i, make_uint4(
-                            min(spheres[nearest].emissionCol.x * 255, 255.0),
-                            min(spheres[nearest].emissionCol.y * 255, 255.0),
-                            min(spheres[nearest].emissionCol.z * 255, 255.0),
-                            255));
-    }
-    else
-    {
-        addSample(out, i, make_uint4(0, 0, 0, 255));
-    }
-
+    float3 sample = getSample(i, depth, pathInf);
+//    float3 sample = make_float3(0, 0, 0);  
+    addSample(out, i, make_uint4(min(sample.x * 255, 255.0),
+                                 min(sample.y * 255, 255.0),
+                                 min(sample.z * 255, 255.0),
+                                 255));
     // Write the seed back
     seeds[i] = seed;
 }

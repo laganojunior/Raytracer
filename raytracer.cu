@@ -89,19 +89,23 @@ void updatePixels()
     // Map the buffer object to some pointer to pass in
     cutilSafeCall(cudaGLMapBufferObject((void**)&d_out, pbo));
 
-    // Set up the grid to get a thread per pixel
-    int numPixelsPerBlock = 64;
-    assert(WINDOW_WIDTH % 64 == 0);
-
-    dim3 gridDim(WINDOW_WIDTH * WINDOW_HEIGHT / numPixelsPerBlock);
-    dim3 blockDim(numPixelsPerBlock);
-
     // Set up the number of samples in the device
     cutilSafeCall(cudaMemcpyToSymbol(d_sampleNum, &numSamples, sizeof(uint),
                                      0, cudaMemcpyHostToDevice));
 
+    // Set up the grid to get a thread per pixel
+    int numPixelsPerBlock = 64;
+    assert(WINDOW_WIDTH % numPixelsPerBlock == 0);
+
+    dim3 gridDim(WINDOW_WIDTH * WINDOW_HEIGHT / numPixelsPerBlock);
+    dim3 blockDim(numPixelsPerBlock);
+
+    // Set enough shared memory to keep recursion information on the
+    // maximum depth. Currently only 6 floats are needed per depth level
+    uint bytesPerBlock = numPixelsPerBlock * sizeof(float3) * 2 * MAX_DEPTH;
+
     // Call the raytracer kernel
-    raytrace<<<gridDim, blockDim>>>
+    raytrace<<<gridDim, blockDim, bytesPerBlock>>>
         (d_out, WINDOW_WIDTH, WINDOW_HEIGHT, vFov, d_spheres, numSpheres,
          d_seeds);
 
@@ -284,15 +288,15 @@ int main(int argc, char** argv)
 
     // The "walls"
     spheres[3].center = make_float3(10000, 0, 0);
-    spheres[3].radius = 9990;
+    spheres[3].radius = 9989;
     spheres[3].emissionCol = make_float3(1.0, 0, 0.1);
 
     spheres[4].center = make_float3(-10000, 0, 0);
-    spheres[4].radius = 9990;
+    spheres[4].radius = 9989;
     spheres[4].emissionCol = make_float3(0.0, 1.0, 0.1);
 
     spheres[5].center = make_float3(0, 10000, 0);
-    spheres[5].radius = 9990;
+    spheres[5].radius = 9989;
     spheres[5].emissionCol = make_float3(0.0, .1, 1.0);
 
     spheres[6].center = make_float3(0, -10000, 0);
@@ -300,11 +304,11 @@ int main(int argc, char** argv)
     spheres[6].emissionCol = make_float3(1.0, 1.0, 1.0);
 
     spheres[7].center = make_float3(0, 0, -10000);
-    spheres[7].radius = 9990;
+    spheres[7].radius = 9989;
     spheres[7].emissionCol = make_float3(0.1, .1, 0.1);
 
     spheres[8].center = make_float3(0, 0, 10000);
-    spheres[8].radius = 9990;
+    spheres[8].radius = 9989;
     spheres[8].emissionCol = make_float3(0.1, .1, 0.1);
 
     // Create some sphere memory on the device
