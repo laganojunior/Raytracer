@@ -8,11 +8,9 @@
 #include <assert.h>
 #include <math.h>
 
-#include "raytracer.h"
+#include "raytracer_kernel.cu"
 #include "cutil_math.h"
 
-#define WINDOW_WIDTH  1024
-#define WINDOW_HEIGHT 1024
 
 // Handle to the pixel buffer object to write to the screen
 GLuint pbo = 0;
@@ -28,6 +26,12 @@ __device__ Sphere * d_spheres;
 Sphere * spheres;
 Sphere * transSpheres;
 int numSpheres = 3;
+
+// Array to keep random seeds
+__device__ uint2 * d_seeds;
+
+// Number of samples
+uint numSamples;
 
 void updateCamMat()
 {
@@ -82,7 +86,6 @@ void updatePixels()
 {
     unsigned char * d_out;
 
-
     // Map the buffer object to some pointer to pass in
     cutilSafeCall(cudaGLMapBufferObject((void**)&d_out, pbo));
 
@@ -93,15 +96,20 @@ void updatePixels()
     dim3 gridDim(WINDOW_WIDTH * WINDOW_HEIGHT / numPixelsPerBlock);
     dim3 blockDim(numPixelsPerBlock);
 
-    // Give enough shared memory for each block to store transformed spheres
-    int memPerBlock = sizeof(Sphere) * numSpheres;
+    // Set up the number of samples in the device
+    cutilSafeCall(cudaMemcpyToSymbol(d_sampleNum, &numSamples, sizeof(uint),
+                                     0, cudaMemcpyHostToDevice));
 
-    raytrace<<<gridDim, blockDim, memPerBlock>>>
-        (d_out, WINDOW_WIDTH, WINDOW_HEIGHT, vFov, d_spheres, numSpheres);
+    // Call the raytracer kernel
+    raytrace<<<gridDim, blockDim>>>
+        (d_out, WINDOW_WIDTH, WINDOW_HEIGHT, vFov, d_spheres, numSpheres,
+         d_seeds);
 
     CUT_CHECK_ERROR("Kernel execution failed");
 
     cutilSafeCall(cudaGLUnmapBufferObject(pbo));
+
+    numSamples++;
 }
  
 void keyboard(unsigned char key, int x, int y)
@@ -113,19 +121,22 @@ void keyboard(unsigned char key, int x, int y)
             vFov *= .95;
             if (vFov < .1)
                 vFov = .1;
+
+            numSamples = 0;
         } break;
         case '-':
         {
             vFov /= .95;
             if (vFov > M_PI - .01)
                 vFov = M_PI - .01;
+
+            numSamples = 0;
         }break;
         case 'q':
         {
             exit(0);
         } break;
     }
-
 }
 
 void keySpecial(int key, int x, int y)
@@ -137,6 +148,8 @@ void keySpecial(int key, int x, int y)
             camYAngle -= .1;
             updateCamMat();
             updateSpheres();
+
+            numSamples = 0;
         } break;
 
         case GLUT_KEY_RIGHT:
@@ -144,6 +157,8 @@ void keySpecial(int key, int x, int y)
             camYAngle += .1;
             updateCamMat();
             updateSpheres();
+
+            numSamples = 0;
         } break;
 
         case GLUT_KEY_UP:
@@ -155,6 +170,8 @@ void keySpecial(int key, int x, int y)
 
             updateCamMat();
             updateSpheres();
+
+            numSamples = 0;
         } break;
 
         case GLUT_KEY_DOWN:
@@ -165,12 +182,12 @@ void keySpecial(int key, int x, int y)
 
             updateCamMat();
             updateSpheres();
+
+            numSamples = 0;
         } break;
-
-
     }
-
 }
+
 void cleanup()
 {
     // Delete the pixel buffer object
@@ -250,7 +267,6 @@ int main(int argc, char** argv)
     glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
     cutilSafeCall(cudaGLRegisterBufferObject(pbo));
 
-
     // Initialize some spheres
     spheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
     transSpheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
@@ -275,6 +291,25 @@ int main(int argc, char** argv)
     // Initialize the initial transformed spheres
     updateSpheres();
 
+    // Initialize the random seeds
+    uint2 * seeds = (uint2 *) malloc(sizeof(uint2) * WINDOW_WIDTH
+                                                      * WINDOW_HEIGHT);
+
+    for (int i = 0; i < WINDOW_WIDTH * WINDOW_HEIGHT; i++)
+    {
+        seeds[i].x = rand() % 2000000 + 1;
+        seeds[i].y = rand() % 2000000 + 1;
+    }
+    
+    cutilSafeCall(cudaMalloc((void**)&d_seeds,  sizeof(uint2) * WINDOW_WIDTH
+                                                              * WINDOW_HEIGHT));
+    
+    cutilSafeCall(cudaMemcpy(d_seeds, seeds,
+                             sizeof(uint2) * WINDOW_WIDTH * WINDOW_HEIGHT,
+                             cudaMemcpyHostToDevice));
+
+    // Initialize the sample count
+    numSamples = 0;
     atexit(cleanup);
 
     glutMainLoop();
