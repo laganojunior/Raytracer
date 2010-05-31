@@ -9,6 +9,7 @@
 #include <math.h>
 
 #include "raytracer.h"
+#include "cutil_math.h"
 
 #define WINDOW_WIDTH  1024
 #define WINDOW_HEIGHT 1024
@@ -16,12 +17,71 @@
 // Handle to the pixel buffer object to write to the screen
 GLuint pbo = 0;
 
-float vFov = M_PI / 3;
+// Some parameters of the camera
+float vFov = M_PI / 3;  // Vertical field of view
+float camYAngle = 0; // Angle around the vertical axis
+float camGroundAngle = M_PI / 4; // Angle off the ground
+float4 camMat[4];
+
+// Array of spheres to pass into the raytracer
+__device__ Sphere * d_spheres;
+Sphere * spheres;
+Sphere * transSpheres;
+int numSpheres = 3;
+
+void updateCamMat()
+{
+
+    // Calculate the position of the camera. The camera fixates on the origin
+    // from 10 units away
+    float  camRad = 10.0;
+    float3 camPos = make_float3(camRad * cos(camYAngle) * cos(camGroundAngle),
+                                camRad * sin(camGroundAngle),
+                                camRad * sin(camYAngle) * cos(camGroundAngle));
+
+    // Use glu's camera implementation to construct the view matrix
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    gluLookAt(camPos.x, camPos.y, camPos.z, 0, 0, 0, 0, 1, 0);
+
+    // Load up the matrix
+    float camF[16];
+    glGetFloatv(GL_MODELVIEW_MATRIX, camF);
+
+    // Transpose the matrix, as openGL stores it in column major(?) form
+    camMat[0] = make_float4(camF[0], camF[4],  camF[8],  camF[12]);
+    camMat[1] = make_float4(camF[1], camF[5],  camF[9],  camF[13]);
+    camMat[2] = make_float4(camF[2], camF[6],  camF[10],  camF[14]);
+    camMat[3] = make_float4(camF[3], camF[7],  camF[11],  camF[15]);
+
+    glPopMatrix();
+}
+
+void updateSpheres()
+{
+    // Transform the spheres by the camera transform
+    for (int i = 0; i < numSpheres; i++)
+    {
+        float4 spherePos = make_float4(spheres[i].center, 1.0);
+        float tX = dot(camMat[0], spherePos);
+        float tY = dot(camMat[1], spherePos);
+        float tZ = -dot(camMat[2], spherePos);
+        transSpheres[i] = spheres[i];
+        transSpheres[i].center = make_float3(tX, tY, tZ);
+    }
+
+    // Copy the spheres over to the device
+    cutilSafeCall(cudaMemcpy(d_spheres, transSpheres,
+                             numSpheres * sizeof(Sphere),
+                             cudaMemcpyHostToDevice));
+}
 
 // Function to update the pixels with new samples from the raytracer
 void updatePixels()
 {
     unsigned char * d_out;
+
 
     // Map the buffer object to some pointer to pass in
     cutilSafeCall(cudaGLMapBufferObject((void**)&d_out, pbo));
@@ -33,7 +93,11 @@ void updatePixels()
     dim3 gridDim(WINDOW_WIDTH * WINDOW_HEIGHT / numPixelsPerBlock);
     dim3 blockDim(numPixelsPerBlock);
 
-    raytrace<<<gridDim, blockDim>>>(d_out, WINDOW_WIDTH, WINDOW_HEIGHT, vFov);
+    // Give enough shared memory for each block to store transformed spheres
+    int memPerBlock = sizeof(Sphere) * numSpheres;
+
+    raytrace<<<gridDim, blockDim, memPerBlock>>>
+        (d_out, WINDOW_WIDTH, WINDOW_HEIGHT, vFov, d_spheres, numSpheres);
 
     CUT_CHECK_ERROR("Kernel execution failed");
 
@@ -49,23 +113,72 @@ void keyboard(unsigned char key, int x, int y)
             vFov *= .95;
             if (vFov < .1)
                 vFov = .1;
-            printf("Vertical FOV:%f\n", vFov);
         } break;
         case '-':
         {
             vFov /= .95;
             if (vFov > M_PI - .01)
                 vFov = M_PI - .01;
-            printf("Vertical FOV:%f\n", vFov);
         }break;
+        case 'q':
+        {
+            exit(0);
+        } break;
     }
 
 }
 
+void keySpecial(int key, int x, int y)
+{
+    switch (key)
+    {
+        case GLUT_KEY_LEFT:
+        {
+            camYAngle -= .1;
+            updateCamMat();
+            updateSpheres();
+        } break;
 
+        case GLUT_KEY_RIGHT:
+        {
+            camYAngle += .1;
+            updateCamMat();
+            updateSpheres();
+        } break;
+
+        case GLUT_KEY_UP:
+        {
+            camGroundAngle += .1;
+
+            if (camGroundAngle > M_PI / 2 - .01)
+                camGroundAngle = M_PI / 2 - .01;
+
+            updateCamMat();
+            updateSpheres();
+        } break;
+
+        case GLUT_KEY_DOWN:
+        {
+            camGroundAngle -= .1;
+            if (camGroundAngle < 0)
+                camGroundAngle = 0;
+
+            updateCamMat();
+            updateSpheres();
+        } break;
+
+
+    }
+
+}
 void cleanup()
 {
+    // Delete the pixel buffer object
     glDeleteBuffersARB(1, &pbo);
+
+    // Free up the sphere array
+    free(spheres);
+    cutilSafeCall(cudaFree(d_spheres));
 }
 
 void reshape(int x, int y)
@@ -121,6 +234,7 @@ int main(int argc, char** argv)
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
     glutKeyboardFunc(keyboard);
+    glutSpecialFunc(keySpecial);
     glutIdleFunc(idle);
 
     glewInit();
@@ -135,6 +249,31 @@ int main(int argc, char** argv)
     glBufferDataARB(GL_PIXEL_UNPACK_BUFFER_ARB, WINDOW_WIDTH*WINDOW_HEIGHT*sizeof(GLubyte)*4, 0, GL_STREAM_DRAW_ARB);
     glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
     cutilSafeCall(cudaGLRegisterBufferObject(pbo));
+
+
+    // Initialize some spheres
+    spheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
+    transSpheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
+    spheres[0].center = make_float3(0, 0, 0);
+    spheres[0].radius = 2.5;
+    spheres[0].emissionCol = make_float3(1.0, .5, 0.0);
+
+    spheres[1].center = make_float3(1.0, 0, 2.0);
+    spheres[1].radius = 1.0;
+    spheres[1].emissionCol = make_float3(1.0, 0.0, 0.0);
+
+    spheres[2].center = make_float3(-1.0, 0, 3.0);
+    spheres[2].radius = 1.0;
+    spheres[2].emissionCol = make_float3(0.0, .5, 0.0);
+
+    // Create some sphere memory on the device
+    cutilSafeCall(cudaMalloc((void**)&d_spheres,  numSpheres * sizeof(Sphere)));
+
+    // Initialize the camera
+    updateCamMat();
+
+    // Initialize the initial transformed spheres
+    updateSpheres();
 
     atexit(cleanup);
 
