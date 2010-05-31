@@ -275,16 +275,16 @@ int main(int argc, char** argv)
     transSpheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
 
     spheres[0].center = make_float3(0, 5, 0);
-    spheres[0].radius = 2.0;
-    spheres[0].emissionCol  = make_float3(10.0, 10.0, 10.0);
+    spheres[0].radius = 1.0;
+    spheres[0].emissionCol  = make_float3(0.0, 0.0, 0.0);
     spheres[0].reflectance  = make_float3(1.0, 1.0, 1.0);
     spheres[0].materialType = MATERIAL_DIFFUSE;
 
     spheres[1].center = make_float3(1.0, 0, 2.0);
     spheres[1].radius = 1.0;
     spheres[1].emissionCol = make_float3(0.0, 0.0, 0.0);
-    spheres[1].reflectance  = make_float3(1.0, 0.0, 1.0);
-    spheres[1].materialType = MATERIAL_DIFFUSE;
+    spheres[1].reflectance  = make_float3(.8, 0.8, .8);
+    spheres[1].materialType = MATERIAL_SPECULAR;
 
     spheres[2].center = make_float3(-1.0, 0, 3.0);
     spheres[2].radius = 1.0;
@@ -308,8 +308,8 @@ int main(int argc, char** argv)
 
     spheres[5].center = make_float3(0, 10000, 0);
     spheres[5].radius = 9989;
-    spheres[5].emissionCol = make_float3(0.0, .0, 0.0);
-    spheres[5].reflectance  = make_float3(1.0, 0.0, 0.0);
+    spheres[5].emissionCol = make_float3(0.5, .5, 0.5);
+    spheres[5].reflectance  = make_float3(1.0, 1.0, 1.0);
     spheres[5].materialType = MATERIAL_DIFFUSE;
 
     spheres[6].center = make_float3(0, -10000, 0);
@@ -320,9 +320,9 @@ int main(int argc, char** argv)
 
     spheres[7].center = make_float3(0, 0, -10000);
     spheres[7].radius = 9989;
-    spheres[7].emissionCol = make_float3(0.1, .1, 0.1);
+    spheres[7].emissionCol = make_float3(0.0, .0, 0.0);
     spheres[7].reflectance  = make_float3(.8, 0.8, .8);
-    spheres[7].materialType = MATERIAL_SPECULAR;
+    spheres[7].materialType = MATERIAL_DIFFUSE;
 
     spheres[8].center = make_float3(0, 0, 10000);
     spheres[8].radius = 9989;
