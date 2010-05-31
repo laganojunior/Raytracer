@@ -132,10 +132,9 @@ __device__ void addSample(unsigned char * out, int i, uint4 sample)
 // is stored in depth.
 ///////////////////////////////////////////////////////////////////////////////
 __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
-                          uint2 * seeds, int * depth, float3 pathInf[])
+                          uint2 * seeds, int * depth, float3 * pathInf)
 {
     int dCount = 0; // How far the path is
-    int pathInfStep = 2 * blockDim.x;
 
     while (dCount < MAX_DEPTH)
     {
@@ -147,11 +146,8 @@ __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
             break;
 
         // Store the next part, which is emission and reflectance.
-        // Note that the path inf array stores data for all threads in
-        // the block..., hence the wierd accessing.
         //  
         // For now, only 1 step emission is counted
-       // pathInf[pathInfStep * dCount + (i * 2)] = spheres[next].emissionCol; 
         pathInf[(dCount * 2)] = spheres[next].emissionCol; 
         dCount ++;
         break;
@@ -165,14 +161,10 @@ __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
 //////////////////////////////////////////////////////////////////////////////
 __device__ float3 getSample(int i, int depth, float3 * pathInf)
 {
-    int pathInfStep = 2 * blockDim.x;
-
     float3 sample = pathInf[0];
     depth--;
     while (depth > 0)
     {
-      //  sample = pathInf[pathInfStep * depth + (i * 2)]
-      //            + pathInf[pathInfStep * depth + (i * 2) + 1] * sample;
         sample = pathInf[depth * 2]
                   + pathInf[depth * 2 + 1] * sample;
         depth --;
@@ -189,8 +181,19 @@ __global__  void raytrace(unsigned char * out, int width, int height,
                           uint2 * seeds)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    
- 
+   
+    extern __shared__ Sphere s_spheres[];
+
+    // Load up spheres into shared memory
+    int startI = 0;
+    while (startI < numSpheres)
+    {
+        if (startI + threadIdx.x < numSpheres)
+           s_spheres[startI + threadIdx.x] = spheres[startI + threadIdx.x];
+
+        startI += blockDim.x;
+    }
+  
     // Get the random seed for this pixel
     uint2 seed = seeds[i];
 
@@ -213,7 +216,7 @@ __global__  void raytrace(unsigned char * out, int width, int height,
     // Recursively build up a path and store necessary light information
     float3 pathInf[2 * MAX_DEPTH];
     int depth;
-    buildPath(i, r, spheres, numSpheres, seeds, &depth, pathInf); 
+    buildPath(i, r, s_spheres, numSpheres, seeds, &depth, pathInf); 
 
     float3 sample = getSample(i, depth, pathInf);
 //    float3 sample = make_float3(0, 0, 0);  

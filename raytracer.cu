@@ -100,9 +100,8 @@ void updatePixels()
     dim3 gridDim(WINDOW_WIDTH * WINDOW_HEIGHT / numPixelsPerBlock);
     dim3 blockDim(numPixelsPerBlock);
 
-    // Set enough shared memory to keep recursion information on the
-    // maximum depth. Currently only 6 floats are needed per depth level
-    uint bytesPerBlock = numPixelsPerBlock * sizeof(float3) * 2 * MAX_DEPTH;
+    // Set enough shared memory to keep the spheres
+    uint bytesPerBlock = numSpheres * sizeof(Sphere);
 
     // Call the raytracer kernel
     raytrace<<<gridDim, blockDim, bytesPerBlock>>>
