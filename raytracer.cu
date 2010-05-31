@@ -25,7 +25,7 @@ float4 camMat[4];
 __device__ Sphere * d_spheres;
 Sphere * spheres;
 Sphere * transSpheres;
-int numSpheres = 3;
+int numSpheres = 9;
 
 // Array to keep random seeds
 __device__ uint2 * d_seeds;
@@ -271,7 +271,7 @@ int main(int argc, char** argv)
     spheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
     transSpheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
     spheres[0].center = make_float3(0, 0, 0);
-    spheres[0].radius = 2.5;
+    spheres[0].radius = 1.0;
     spheres[0].emissionCol = make_float3(1.0, .5, 0.0);
 
     spheres[1].center = make_float3(1.0, 0, 2.0);
@@ -281,6 +281,31 @@ int main(int argc, char** argv)
     spheres[2].center = make_float3(-1.0, 0, 3.0);
     spheres[2].radius = 1.0;
     spheres[2].emissionCol = make_float3(0.0, .5, 0.0);
+
+    // The "walls"
+    spheres[3].center = make_float3(10000, 0, 0);
+    spheres[3].radius = 9990;
+    spheres[3].emissionCol = make_float3(1.0, 0, 0.1);
+
+    spheres[4].center = make_float3(-10000, 0, 0);
+    spheres[4].radius = 9990;
+    spheres[4].emissionCol = make_float3(0.0, 1.0, 0.1);
+
+    spheres[5].center = make_float3(0, 10000, 0);
+    spheres[5].radius = 9990;
+    spheres[5].emissionCol = make_float3(0.0, .1, 1.0);
+
+    spheres[6].center = make_float3(0, -10000, 0);
+    spheres[6].radius = 9999;
+    spheres[6].emissionCol = make_float3(1.0, 1.0, 1.0);
+
+    spheres[7].center = make_float3(0, 0, -10000);
+    spheres[7].radius = 9990;
+    spheres[7].emissionCol = make_float3(0.1, .1, 0.1);
+
+    spheres[8].center = make_float3(0, 0, 10000);
+    spheres[8].radius = 9990;
+    spheres[8].emissionCol = make_float3(0.1, .1, 0.1);
 
     // Create some sphere memory on the device
     cutilSafeCall(cudaMalloc((void**)&d_spheres,  numSpheres * sizeof(Sphere)));
