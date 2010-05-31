@@ -273,42 +273,61 @@ int main(int argc, char** argv)
     // Initialize some spheres
     spheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
     transSpheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
-    spheres[0].center = make_float3(0, 0, 0);
-    spheres[0].radius = 1.0;
-    spheres[0].emissionCol = make_float3(1.0, .5, 0.0);
+    spheres[0].center = make_float3(0, 5, 0);
+    spheres[0].radius = 2.0;
+    spheres[0].emissionCol  = make_float3(10.0, 10.0, 10.0);
+    spheres[0].reflectance  = make_float3(1.0, 1.0, 1.0);
+    spheres[0].materialType = MATERIAL_DIFFUSE;
 
     spheres[1].center = make_float3(1.0, 0, 2.0);
     spheres[1].radius = 1.0;
-    spheres[1].emissionCol = make_float3(1.0, 0.0, 0.0);
+    spheres[1].emissionCol = make_float3(0.0, 0.0, 0.0);
+    spheres[1].reflectance  = make_float3(1.0, 0.0, 1.0);
+    spheres[1].materialType = MATERIAL_DIFFUSE;
 
     spheres[2].center = make_float3(-1.0, 0, 3.0);
     spheres[2].radius = 1.0;
-    spheres[2].emissionCol = make_float3(0.0, .5, 0.0);
+    spheres[2].emissionCol = make_float3(0.0, .0, 0.0);
+    spheres[2].reflectance  = make_float3(1.0, 0.0, 0.0);
+    spheres[2].materialType = MATERIAL_DIFFUSE;
 
     // The "walls"
     spheres[3].center = make_float3(10000, 0, 0);
     spheres[3].radius = 9989;
-    spheres[3].emissionCol = make_float3(1.0, 0, 0.1);
+    spheres[3].emissionCol = make_float3(0.0, 0, 0.0);
+    spheres[3].reflectance  = make_float3(0.0, 0.0, 1.0);
+    spheres[3].materialType = MATERIAL_DIFFUSE;
+
 
     spheres[4].center = make_float3(-10000, 0, 0);
     spheres[4].radius = 9989;
-    spheres[4].emissionCol = make_float3(0.0, 1.0, 0.1);
+    spheres[4].emissionCol = make_float3(0.0, 0.0, 0.0);
+    spheres[4].reflectance  = make_float3(0.0, 1.0, 0.0);
+    spheres[4].materialType = MATERIAL_DIFFUSE;
 
     spheres[5].center = make_float3(0, 10000, 0);
     spheres[5].radius = 9989;
-    spheres[5].emissionCol = make_float3(0.0, .1, 1.0);
+    spheres[5].emissionCol = make_float3(0.0, .0, 0.0);
+    spheres[5].reflectance  = make_float3(1.0, 0.0, 0.0);
+    spheres[5].materialType = MATERIAL_DIFFUSE;
 
     spheres[6].center = make_float3(0, -10000, 0);
     spheres[6].radius = 9999;
-    spheres[6].emissionCol = make_float3(1.0, 1.0, 1.0);
+    spheres[6].emissionCol = make_float3(0.0, 0.0, 0.0);
+    spheres[6].reflectance  = make_float3(1.0, 1.0, 1.0);
+    spheres[6].materialType = MATERIAL_DIFFUSE;
 
     spheres[7].center = make_float3(0, 0, -10000);
     spheres[7].radius = 9989;
     spheres[7].emissionCol = make_float3(0.1, .1, 0.1);
+    spheres[7].reflectance  = make_float3(1.0, 0.0, 1.0);
+    spheres[7].materialType = MATERIAL_DIFFUSE;
 
     spheres[8].center = make_float3(0, 0, 10000);
     spheres[8].radius = 9989;
-    spheres[8].emissionCol = make_float3(0.1, .1, 0.1);
+    spheres[8].emissionCol = make_float3(0.0, .0, 0.0);
+    spheres[8].reflectance  = make_float3(.5, 0.5, .5);
+    spheres[8].materialType = MATERIAL_DIFFUSE;
 
     // Create some sphere memory on the device
     cutilSafeCall(cudaMalloc((void**)&d_spheres,  numSpheres * sizeof(Sphere)));

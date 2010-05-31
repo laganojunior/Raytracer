@@ -34,7 +34,7 @@ struct Ray
 };
 
 // The maximum depth to go up to. This is hardcoded in compile time.
-#define MAX_DEPTH 5
+#define MAX_DEPTH 20
 
 // Number of samples taken so far
 __constant__ uint d_sampleNum;
@@ -126,13 +126,53 @@ __device__ void addSample(unsigned char * out, int i, uint4 sample)
     out[4 * i+3] = (out[4 * i+3] * d_sampleNum + sample.w) / (d_sampleNum + 1);
     
 }
+///////////////////////////////////////////////////////////////////////////////
+// Return a random reflection vector given a normal using cosine density
+// (i.e. more likely to reflect toward the normal)
+///////////////////////////////////////////////////////////////////////////////
+__device__ float3 getRandRef(float3 normal, uint2 * seed)
+{
+    // Get a random rotation (phi) about the normal and angle off the plane
+    // (theta) perpendicular to the normal
+    float cosTheta = sqrt(1 - getRandFloat(seed));
+    float sinTheta = sqrt(1 - cosTheta * cosTheta);
+    float phi = 2.0 * 3.14 * getRandFloat(seed);
+
+    // Construct some uvw basis respective to the normal, such that the
+    // w axis goes along the normal.
+    float3 w = normal;
+
+    // initial value for v can be arbitrary as long as its not parallel
+    // to the normal
+    float3 v = normalize(normal + make_float3(normal.z, normal.x, normal.y));
+    
+    // calculate v and u using cross products, note that sign doesn't really
+    // matter
+    float3 u = cross(w, v);
+    v = cross(w, u);
+
+    // Use the basis and the angles to calculate the reflection
+    float3 ref = u * (sinTheta * cos(phi))
+               + v * (sinTheta * sin(phi))
+               + w * (cosTheta);
+
+    return normalize(ref);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Return the sphere normal at some point
+///////////////////////////////////////////////////////////////////////////////
+__device__ float3 getNormal(Sphere s, float3 p)
+{
+    return normalize(p - s.center);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // Build a path, collecting light samples along the way. The depth traveled
 // is stored in depth.
 ///////////////////////////////////////////////////////////////////////////////
 __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
-                          uint2 * seeds, int * depth, float3 * pathInf)
+                          uint2 * seed, int * depth, float3 * pathInf)
 {
     int dCount = 0; // How far the path is
 
@@ -145,12 +185,25 @@ __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
         if (next == -1)
             break;
 
-        // Store the next part, which is emission and reflectance.
-        //  
-        // For now, only 1 step emission is counted
+        // Store the emission of this sphere
         pathInf[(dCount * 2)] = spheres[next].emissionCol; 
+
+        // Check the type of material to see the next ray to shoot and the
+        // reflectance value
+        float3 nextDir;
+        if (spheres[next].materialType == MATERIAL_DIFFUSE)
+        {
+            // Diffuse uses cosine density to reflect
+            nextDir = getRandRef(getNormal(spheres[next], p), seed);
+            
+            r.o = p;
+            r.d = nextDir;
+
+            // Reflectance is constant regardless of direction
+            pathInf[(dCount * 2) + 1] = spheres[next].reflectance;
+        }
+
         dCount ++;
-        break;
     }
 
     *depth = dCount;
@@ -216,10 +269,9 @@ __global__  void raytrace(unsigned char * out, int width, int height,
     // Recursively build up a path and store necessary light information
     float3 pathInf[2 * MAX_DEPTH];
     int depth;
-    buildPath(i, r, s_spheres, numSpheres, seeds, &depth, pathInf); 
+    buildPath(i, r, s_spheres, numSpheres, &seed, &depth, pathInf); 
 
     float3 sample = getSample(i, depth, pathInf);
-//    float3 sample = make_float3(0, 0, 0);  
     addSample(out, i, make_uint4(min(sample.x * 255, 255.0),
                                  min(sample.y * 255, 255.0),
                                  min(sample.z * 255, 255.0),
