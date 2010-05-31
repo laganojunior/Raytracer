@@ -8,7 +8,8 @@
 
 
 // types of materials
-#define MATERIAL_DIFFUSE 1 // A perfectly diffuse material
+#define MATERIAL_DIFFUSE 1  // A perfectly diffuse material
+#define MATERIAL_SPECULAR 2 // A perfectly specular material
 
 struct __align__(16) Sphere
 {
@@ -202,6 +203,18 @@ __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
             // Reflectance is constant regardless of direction
             pathInf[(dCount * 2) + 1] = spheres[next].reflectance;
         }
+        else if (spheres[next].materialType == MATERIAL_SPECULAR)
+        {
+            // Perfectly specular surfaces perfect reflect the ray
+            // nextDir = getRef(getNormal(spheres[next], p), r.d);
+            
+            r.o = p;
+            r.d = nextDir;
+
+            // Reflectance is modified depending on how the ray hits
+            // the material
+            
+        }
 
         dCount ++;
     }
@@ -214,12 +227,12 @@ __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
 //////////////////////////////////////////////////////////////////////////////
 __device__ float3 getSample(int i, int depth, float3 * pathInf)
 {
-    float3 sample = pathInf[0];
+    float3 sample = pathInf[(depth - 1) * 2];
     depth--;
     while (depth > 0)
     {
-        sample = pathInf[depth * 2]
-                  + pathInf[depth * 2 + 1] * sample;
+        sample = pathInf[(depth - 1) * 2]
+                  + pathInf[(depth - 1) * 2 + 1] * sample;
         depth --;
     }
 
