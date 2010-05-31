@@ -273,6 +273,7 @@ int main(int argc, char** argv)
     // Initialize some spheres
     spheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
     transSpheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
+
     spheres[0].center = make_float3(0, 5, 0);
     spheres[0].radius = 2.0;
     spheres[0].emissionCol  = make_float3(10.0, 10.0, 10.0);
@@ -320,14 +321,15 @@ int main(int argc, char** argv)
     spheres[7].center = make_float3(0, 0, -10000);
     spheres[7].radius = 9989;
     spheres[7].emissionCol = make_float3(0.1, .1, 0.1);
-    spheres[7].reflectance  = make_float3(1.0, 0.0, 1.0);
-    spheres[7].materialType = MATERIAL_DIFFUSE;
+    spheres[7].reflectance  = make_float3(.8, 0.8, .8);
+    spheres[7].materialType = MATERIAL_SPECULAR;
 
     spheres[8].center = make_float3(0, 0, 10000);
     spheres[8].radius = 9989;
     spheres[8].emissionCol = make_float3(0.0, .0, 0.0);
     spheres[8].reflectance  = make_float3(.5, 0.5, .5);
     spheres[8].materialType = MATERIAL_DIFFUSE;
+
 
     // Create some sphere memory on the device
     cutilSafeCall(cudaMalloc((void**)&d_spheres,  numSpheres * sizeof(Sphere)));

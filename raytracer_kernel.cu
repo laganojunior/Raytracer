@@ -161,6 +161,14 @@ __device__ float3 getRandRef(float3 normal, uint2 * seed)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Return the perfectly reflected vector
+///////////////////////////////////////////////////////////////////////////////
+__device__ float3 getRefPerfect(float3 n, float3 in)
+{
+    return in - 2.0 * dot(in, n) * n;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Return the sphere normal at some point
 ///////////////////////////////////////////////////////////////////////////////
 __device__ float3 getNormal(Sphere s, float3 p)
@@ -206,14 +214,23 @@ __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
         else if (spheres[next].materialType == MATERIAL_SPECULAR)
         {
             // Perfectly specular surfaces perfect reflect the ray
-            // nextDir = getRef(getNormal(spheres[next], p), r.d);
+            float3 n = getNormal(spheres[next], p);
+            nextDir = getRefPerfect(n, r.d);
             
             r.o = p;
             r.d = nextDir;
 
             // Reflectance is modified depending on how the ray hits
             // the material
+
+            // One minus cos (theta), theta is the angle the reflection
+            // makes off the normal
+            float omct = 1 - dot(nextDir, n);
+            float omct5 = omct * omct * omct * omct * omct;
             
+            pathInf[(dCount * 2) + 1] = spheres[next].reflectance
+                                    + (make_float3(1.0, 1.0, 1.0)
+                                       - spheres[next].reflectance) * omct5; 
         }
 
         dCount ++;
