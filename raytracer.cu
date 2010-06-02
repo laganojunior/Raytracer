@@ -104,7 +104,7 @@ void updatePixels()
 
     // Call the raytracer kernel
     raytrace<<<gridDim, blockDim, bytesPerBlock>>>
-        (d_out, WINDOW_WIDTH, WINDOW_HEIGHT, vFov, d_spheres, numSpheres, 1,
+        (d_out, WINDOW_WIDTH, WINDOW_HEIGHT, vFov, d_spheres, numSpheres,
          d_seeds);
 
     CUT_CHECK_ERROR("Kernel execution failed");
@@ -269,13 +269,22 @@ int main(int argc, char** argv)
     glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
     cutilSafeCall(cudaGLRegisterBufferObject(pbo));
 
+    float * d_out;
+
+    // Map the buffer object to some pointer to pass in
+    cutilSafeCall(cudaGLMapBufferObject((void**)&d_out, pbo));
+
+    // Zero out the buffer
+    cutilSafeCall(cudaMemset(d_out, 0, sizeof(GLfloat) * 4 * WINDOW_WIDTH * WINDOW_HEIGHT));
+    cutilSafeCall(cudaGLUnmapBufferObject(pbo));
+
     // Initialize some spheres
     spheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
     transSpheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
 
     spheres[0].center = make_float3(0, 5, 0);
     spheres[0].radius = 1.0;
-    spheres[0].emissionCol  = make_float3(100.0, 100.0, 100.0);
+    spheres[0].emissionCol  = make_float3(2.0, 2.0, 2.0);
     spheres[0].reflectance  = make_float3(1.0, 1.0, 1.0);
     spheres[0].materialType = MATERIAL_DIFFUSE;
 
@@ -295,21 +304,21 @@ int main(int argc, char** argv)
     spheres[3].center = make_float3(10000, 0, 0);
     spheres[3].radius = 9989;
     spheres[3].emissionCol = make_float3(0.0, 0, 0.0);
-    spheres[3].reflectance  = make_float3(0.0, 0.0, 1.0);
-    spheres[3].materialType = MATERIAL_DIFFUSE;
+    spheres[3].reflectance  = make_float3(.8, .8, .8);
+    spheres[3].materialType = MATERIAL_SPECULAR;
 
 
     spheres[4].center = make_float3(-10000, 0, 0);
     spheres[4].radius = 9989;
     spheres[4].emissionCol = make_float3(0.0, 0.0, 0.0);
-    spheres[4].reflectance  = make_float3(0.0, 1.0, 0.0);
-    spheres[4].materialType = MATERIAL_DIFFUSE;
+    spheres[4].reflectance  = make_float3(1.0, 1.0, 1.0);
+    spheres[4].materialType = MATERIAL_SPECULAR;
 
     spheres[5].center = make_float3(0, 10000, 0);
     spheres[5].radius = 9989;
     spheres[5].emissionCol = make_float3(0.0, .0, 0.0);
-    spheres[5].reflectance  = make_float3(1.0, 1.0, 1.0);
-    spheres[5].materialType = MATERIAL_DIFFUSE;
+    spheres[5].reflectance  = make_float3(.8, .8, .8);
+    spheres[5].materialType = MATERIAL_SPECULAR;
 
     spheres[6].center = make_float3(0, -10000, 0);
     spheres[6].radius = 9999;
@@ -320,13 +329,13 @@ int main(int argc, char** argv)
     spheres[7].center = make_float3(0, 0, -10000);
     spheres[7].radius = 9989;
     spheres[7].emissionCol = make_float3(0.0, .0, 0.0);
-    spheres[7].reflectance  = make_float3(.8, 0.8, .8);
+    spheres[7].reflectance  = make_float3(1.0, 1.0, 1.0);
     spheres[7].materialType = MATERIAL_DIFFUSE;
 
     spheres[8].center = make_float3(0, 0, 10000);
     spheres[8].radius = 9989;
     spheres[8].emissionCol = make_float3(0.0, .0, 0.0);
-    spheres[8].reflectance  = make_float3(.5, 0.5, .5);
+    spheres[8].reflectance  = make_float3(1.0, 1.0, 1.0);
     spheres[8].materialType = MATERIAL_DIFFUSE;
 
 
@@ -358,6 +367,7 @@ int main(int argc, char** argv)
 
     // Initialize the sample count
     numSamples = 0;
+
     atexit(cleanup);
 
     glutMainLoop();
