@@ -28,10 +28,17 @@ struct __align__(16) Sphere
 
 };
 
-struct Ray
+struct __align__(16) Ray
 {
     float3 o;
     float3 d;
+};
+
+struct __align__(16) EyePathNode
+{
+    float3 emission;
+    float3 reflectance;
+    int reflectOff; // Material type hit
 };
 
 // The maximum depth to go up to. This is hardcoded in compile time.
@@ -181,7 +188,7 @@ __device__ float3 getNormal(Sphere s, float3 p)
 // is stored in depth.
 ///////////////////////////////////////////////////////////////////////////////
 __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
-                          uint2 * seed, int * depth, float3 * pathInf)
+                          uint2 * seed, int * depth, EyePathNode * pathInf)
 {
     int dCount = 0; // How far the path is
 
@@ -195,7 +202,7 @@ __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
             break;
 
         // Store the emission of this sphere
-        pathInf[(dCount * 2)] = spheres[next].emissionCol; 
+        pathInf[dCount].emission = spheres[next].emissionCol; 
 
         // Check the type of material to see the next ray to shoot and the
         // reflectance value
@@ -209,7 +216,9 @@ __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
             r.d = nextDir;
 
             // Reflectance is constant regardless of direction
-            pathInf[(dCount * 2) + 1] = spheres[next].reflectance;
+            pathInf[dCount].reflectance = spheres[next].reflectance;
+
+            pathInf[dCount].reflectOff = MATERIAL_DIFFUSE;
         }
         else if (spheres[next].materialType == MATERIAL_SPECULAR)
         {
@@ -228,9 +237,11 @@ __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
             float omct = 1 - dot(nextDir, n);
             float omct5 = omct * omct * omct * omct * omct;
             
-            pathInf[(dCount * 2) + 1] = spheres[next].reflectance
+            pathInf[dCount].reflectance = spheres[next].reflectance
                                     + (make_float3(1.0, 1.0, 1.0)
                                        - spheres[next].reflectance) * omct5; 
+
+            pathInf[dCount].reflectOff = MATERIAL_SPECULAR;
         }
 
         dCount ++;
@@ -242,14 +253,14 @@ __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
 ///////////////////////////////////////////////////////////////////////////////
 // Combine the path information to get a sample
 //////////////////////////////////////////////////////////////////////////////
-__device__ float3 getSample(int i, int depth, float3 * pathInf)
+__device__ float3 getSample(int i, int depth, EyePathNode * pathInf)
 {
-    float3 sample = pathInf[(depth - 1) * 2];
+    float3 sample = pathInf[depth - 1].emission;
     depth--;
     while (depth > 0)
     {
-        sample = pathInf[(depth - 1) * 2]
-                  + pathInf[(depth - 1) * 2 + 1] * sample;
+        sample = pathInf[depth-1].emission
+               + pathInf[depth-1].reflectance * sample;
         depth --;
     }
 
@@ -297,7 +308,7 @@ __global__  void raytrace(unsigned char * out, int width, int height,
     r.d = normalize(make_float3(x, y, 1.0));
 
     // Recursively build up a path and store necessary light information
-    float3 pathInf[2 * MAX_DEPTH];
+    EyePathNode pathInf[MAX_DEPTH];
     int depth;
     buildPath(i, r, s_spheres, numSpheres, &seed, &depth, pathInf); 
 

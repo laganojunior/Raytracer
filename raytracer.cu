@@ -276,7 +276,7 @@ int main(int argc, char** argv)
 
     spheres[0].center = make_float3(0, 5, 0);
     spheres[0].radius = 1.0;
-    spheres[0].emissionCol  = make_float3(0.0, 0.0, 0.0);
+    spheres[0].emissionCol  = make_float3(100.0, 100.0, 100.0);
     spheres[0].reflectance  = make_float3(1.0, 1.0, 1.0);
     spheres[0].materialType = MATERIAL_DIFFUSE;
 
@@ -308,7 +308,7 @@ int main(int argc, char** argv)
 
     spheres[5].center = make_float3(0, 10000, 0);
     spheres[5].radius = 9989;
-    spheres[5].emissionCol = make_float3(0.5, .5, 0.5);
+    spheres[5].emissionCol = make_float3(0.0, .0, 0.0);
     spheres[5].reflectance  = make_float3(1.0, 1.0, 1.0);
     spheres[5].materialType = MATERIAL_DIFFUSE;
 
