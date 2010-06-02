@@ -35,7 +35,6 @@ uint numSamples;
 
 void updateCamMat()
 {
-
     // Calculate the position of the camera. The camera fixates on the origin
     // from 10 units away
     float  camRad = 10.0;
@@ -84,7 +83,7 @@ void updateSpheres()
 // Function to update the pixels with new samples from the raytracer
 void updatePixels()
 {
-    unsigned char * d_out;
+    float * d_out;
 
     // Map the buffer object to some pointer to pass in
     cutilSafeCall(cudaGLMapBufferObject((void**)&d_out, pbo));
@@ -105,7 +104,7 @@ void updatePixels()
 
     // Call the raytracer kernel
     raytrace<<<gridDim, blockDim, bytesPerBlock>>>
-        (d_out, WINDOW_WIDTH, WINDOW_HEIGHT, vFov, d_spheres, numSpheres,
+        (d_out, WINDOW_WIDTH, WINDOW_HEIGHT, vFov, d_spheres, numSpheres, 1,
          d_seeds);
 
     CUT_CHECK_ERROR("Kernel execution failed");
@@ -226,7 +225,7 @@ void display()
     glDisable(GL_DEPTH_TEST);
     glRasterPos2i(0, 0);
     glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
-    glDrawPixels(WINDOW_WIDTH, WINDOW_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    glDrawPixels(WINDOW_WIDTH, WINDOW_HEIGHT, GL_RGBA, GL_FLOAT, 0);
     glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
 
     glutSwapBuffers();
@@ -266,7 +265,7 @@ int main(int argc, char** argv)
     // Initialize the pixel buffer object
     glGenBuffersARB(1, &pbo);
     glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB, pbo);
-    glBufferDataARB(GL_PIXEL_UNPACK_BUFFER_ARB, WINDOW_WIDTH*WINDOW_HEIGHT*sizeof(GLubyte)*4, 0, GL_STREAM_DRAW_ARB);
+    glBufferDataARB(GL_PIXEL_UNPACK_BUFFER_ARB, WINDOW_WIDTH*WINDOW_HEIGHT*sizeof(GLfloat) * 4, 0, GL_STREAM_DRAW_ARB);
     glBindBufferARB(GL_PIXEL_UNPACK_BUFFER_ARB, 0);
     cutilSafeCall(cudaGLRegisterBufferObject(pbo));
 

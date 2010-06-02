@@ -47,11 +47,6 @@ struct __align__(16) EyePathNode
 // Number of samples taken so far
 __constant__ uint d_sampleNum;
 
-__global__  void raytrace(unsigned char * out, int width, int height,
-                          float vFov, Sphere * spheres, int numSpheres,
-                          uint2 * seeds);
-
-
 /////////////////////////////////////////////////////////////////////////////
 // A simple multiply with carry 32 bit random number generator. The state
 // of the random number generator is carried in the arguments. Taken
@@ -97,7 +92,6 @@ __device__ float rayIntersectSphere(Ray ray, float3 center, float radius)
     return CUDA_INF;
 }
 
-
 ///////////////////////////////////////////////////////////////////////////////
 // Return the nearest sphere index. If none intesect, -1 is returned
 ///////////////////////////////////////////////////////////////////////////////
@@ -125,15 +119,30 @@ __device__ int nearestSphere(Ray r, Sphere * spheres, int numSpheres,
 ///////////////////////////////////////////////////////////////////////////////
 // Average in the current sample
 ///////////////////////////////////////////////////////////////////////////////
-__device__ void addSample(unsigned char * out, int i, uint4 sample)
+__device__ void addSample(float * out, int i, float4 sample)
 {
-    
-    out[4 * i]   = (out[4 * i]  * d_sampleNum + sample.x)   / (d_sampleNum + 1);
-    out[4 * i+1] = (out[4 * i+1] * d_sampleNum + sample.y) / (d_sampleNum + 1);
-    out[4 * i+2] = (out[4 * i+2] * d_sampleNum + sample.z) / (d_sampleNum + 1);
-    out[4 * i+3] = (out[4 * i+3] * d_sampleNum + sample.w) / (d_sampleNum + 1);
-    
+    // Case out the d_sampleNum = 0 case, in which case the initial data
+    // should not be used. Note this case is usually taken care of, except of
+    // the case when the initial value something like NAN or INF (it seems to
+    // happen quite a bit). Note there is no branching penalty, as d_sampleNum
+    // is the same for all threads
+    if (d_sampleNum == 0)
+    {
+        out[4 * i]   = sample.x;
+        out[4 * i+1] = sample.y;
+        out[4 * i+2] = sample.z; 
+        out[4 * i+3] = sample.w;
+    }
+    else
+    {
+        out[4 * i]   = (out[4 * i]  * d_sampleNum + sample.x)
+                            / (d_sampleNum + 1);
+        out[4 * i+1] = (out[4 * i+1] * d_sampleNum + sample.y) / (d_sampleNum + 1);
+        out[4 * i+2] = (out[4 * i+2] * d_sampleNum + sample.z) / (d_sampleNum + 1);
+        out[4 * i+3] = (out[4 * i+3] * d_sampleNum + sample.w) / (d_sampleNum + 1);
+    }
 }
+
 ///////////////////////////////////////////////////////////////////////////////
 // Return a random reflection vector given a normal using cosine density
 // (i.e. more likely to reflect toward the normal)
@@ -184,11 +193,29 @@ __device__ float3 getNormal(Sphere s, float3 p)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// Return a random point on a sphere's surface
+///////////////////////////////////////////////////////////////////////////////
+__device__ float3 getRandPoint(Sphere s, uint2 * seed)
+{
+    // Use spherical coordinates
+    float phi = getRandFloat(seed) * 2 * 3.14;
+    float theta = getRandFloat(seed) * 3.14;
+
+    return make_float3(s.center.x + s.radius * cos(phi) * sin(theta),
+                       s.center.y + s.radius * sin(phi) * sin(theta),
+                       s.center.z + s.radius * cos(theta));
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // Build a path, collecting light samples along the way. The depth traveled
 // is stored in depth.
+//
+// This function assumes that the spheres are organized such that the
+// light emitting ones are at the front of the array
 ///////////////////////////////////////////////////////////////////////////////
 __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
-                          uint2 * seed, int * depth, EyePathNode * pathInf)
+                          int numLights, uint2 * seed, int * depth,
+                          EyePathNode * pathInf)
 {
     int dCount = 0; // How far the path is
 
@@ -200,7 +227,7 @@ __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
 
         if (next == -1)
             break;
-
+    
         // Store the emission of this sphere
         pathInf[dCount].emission = spheres[next].emissionCol; 
 
@@ -209,16 +236,35 @@ __device__ void buildPath(int i, Ray r, Sphere * spheres, int numSpheres,
         float3 nextDir;
         if (spheres[next].materialType == MATERIAL_DIFFUSE)
         {
-            // Diffuse uses cosine density to reflect
-            nextDir = getRandRef(getNormal(spheres[next], p), seed);
-            
-            r.o = p;
-            r.d = nextDir;
+            if (/*dCount == MAX_DEPTH - 2*/false)
+            {
+                // If the path is about to end, direct it to some light.
+                int choice = getRand(seed) % numLights;
 
-            // Reflectance is constant regardless of direction
-            pathInf[dCount].reflectance = spheres[next].reflectance;
+                float3 dest = getRandPoint(spheres[choice], seed);
+                r.o = p;
+                r.d = normalize(dest - p);
+                
+                // However, since the path was not randomly chosen, scale
+                // the reflectance by the density of the path, so that
+                // less likely paths have less weight
+                pathInf[dCount].reflectance = spheres[next].reflectance
+                                * dot(r.d, getNormal(spheres[next], p))
+                                / (2 * 3.14); 
+            }
+            else
+            {
+                // Diffuse uses cosine density to reflect
+                nextDir = getRandRef(getNormal(spheres[next], p), seed);
+                
+                r.o = p;
+                r.d = nextDir;
 
-            pathInf[dCount].reflectOff = MATERIAL_DIFFUSE;
+                // Reflectance is constant regardless of direction
+                pathInf[dCount].reflectance = spheres[next].reflectance;
+
+                pathInf[dCount].reflectOff = MATERIAL_DIFFUSE;
+            }
         }
         else if (spheres[next].materialType == MATERIAL_SPECULAR)
         {
@@ -270,9 +316,9 @@ __device__ float3 getSample(int i, int depth, EyePathNode * pathInf)
 ///////////////////////////////////////////////////////////////////////////////
 // The kernel function to handle one pass of the raytracer
 ///////////////////////////////////////////////////////////////////////////////
-__global__  void raytrace(unsigned char * out, int width, int height,
+__global__  void raytrace(float * out, int width, int height,
                           float vFov, Sphere * spheres, int numSpheres,
-                          uint2 * seeds)
+                          int numLights, uint2 * seeds)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
    
@@ -310,13 +356,13 @@ __global__  void raytrace(unsigned char * out, int width, int height,
     // Recursively build up a path and store necessary light information
     EyePathNode pathInf[MAX_DEPTH];
     int depth;
-    buildPath(i, r, s_spheres, numSpheres, &seed, &depth, pathInf); 
+    buildPath(i, r, s_spheres, numSpheres, numLights, &seed, &depth, pathInf); 
 
     float3 sample = getSample(i, depth, pathInf);
-    addSample(out, i, make_uint4(min(sample.x * 255, 255.0),
-                                 min(sample.y * 255, 255.0),
-                                 min(sample.z * 255, 255.0),
-                                 255));
+    addSample(out, i, make_float4(min(sample.x, 1.0),
+                                  min(sample.y, 1.0),
+                                  min(sample.z, 1.0),
+                                  1.0));
     // Write the seed back
     seeds[i] = seed;
 }
