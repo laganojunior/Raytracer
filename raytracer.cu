@@ -15,9 +15,6 @@
 // Handle to the pixel buffer object to write to the screen
 GLuint pbo = 0;
 
-// Buffer for unfiltered pixel data
-__device__ float * d_unfilt;
-
 // Some parameters of the camera
 float vFov = M_PI / 3;  // Vertical field of view
 float camYAngle = 0; // Angle around the vertical axis
@@ -109,19 +106,6 @@ void updatePixels()
 
     cutilSafeCall(cudaGLUnmapBufferObject(pbo));
     CUT_CHECK_ERROR("Kernel execution failed");
-/*
-    float * d_out;
-
-    // Map the buffer object to some pointer to pass in
-    cutilSafeCall(cudaGLMapBufferObject((void**)&d_out, pbo));
-
-    // Call the filtering kernel
-    medianFilter<<<gridDim, blockDim>>>
-        (d_out, d_unfilt, WINDOW_WIDTH, WINDOW_HEIGHT);
-
-    // Unmap the buffer object
-    cutilSafeCall(cudaGLUnmapBufferObject(pbo));
-*/
     numSamples++;
 }
  
@@ -289,13 +273,6 @@ int main(int argc, char** argv)
     cutilSafeCall(cudaMemset(d_out, 0, sizeof(GLfloat) * 4 * WINDOW_WIDTH * WINDOW_HEIGHT));
     cutilSafeCall(cudaGLUnmapBufferObject(pbo));
 
-    // Make some space to keep rolling unfiltered samples
-    cutilSafeCall(cudaMalloc((void**)&d_unfilt,
-                             sizeof(GLfloat) * 4
-                                             * WINDOW_WIDTH * WINDOW_HEIGHT));
-    cutilSafeCall(cudaMemset(d_unfilt, 0, sizeof(GLfloat) * 4
-                                            * WINDOW_WIDTH * WINDOW_HEIGHT));
-
     // Initialize some spheres
     spheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
     transSpheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
@@ -341,7 +318,7 @@ int main(int argc, char** argv)
     spheres[6].center = make_float3(0, -10000, 0);
     spheres[6].radius = 9999;
     spheres[6].emissionCol = make_float3(0.0, 0.0, 0.0);
-    spheres[6].reflectance  = make_float3(.5, 0.5, 0.5);
+    spheres[6].reflectance  = make_float3(.9, 0.95, 0.95);
     spheres[6].materialType = MATERIAL_DIFFUSE;
 
     spheres[7].center = make_float3(0, 0, -10000);
