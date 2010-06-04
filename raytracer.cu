@@ -15,6 +15,9 @@
 // Handle to the pixel buffer object to write to the screen
 GLuint pbo = 0;
 
+// Buffer for unfiltered pixel data
+__device__ float * d_unfilt;
+
 // Some parameters of the camera
 float vFov = M_PI / 3;  // Vertical field of view
 float camYAngle = 0; // Angle around the vertical axis
@@ -83,11 +86,6 @@ void updateSpheres()
 // Function to update the pixels with new samples from the raytracer
 void updatePixels()
 {
-    float * d_out;
-
-    // Map the buffer object to some pointer to pass in
-    cutilSafeCall(cudaGLMapBufferObject((void**)&d_out, pbo));
-
     // Set up the number of samples in the device
     cutilSafeCall(cudaMemcpyToSymbol(d_sampleNum, &numSamples, sizeof(uint),
                                      0, cudaMemcpyHostToDevice));
@@ -103,14 +101,27 @@ void updatePixels()
     uint bytesPerBlock = numSpheres * sizeof(Sphere);
 
     // Call the raytracer kernel
+    float * d_out;
+    cutilSafeCall(cudaGLMapBufferObject((void**)&d_out, pbo));
     raytrace<<<gridDim, blockDim, bytesPerBlock>>>
         (d_out, WINDOW_WIDTH, WINDOW_HEIGHT, vFov, d_spheres, numSpheres,
          d_seeds);
 
-    CUT_CHECK_ERROR("Kernel execution failed");
-
     cutilSafeCall(cudaGLUnmapBufferObject(pbo));
+    CUT_CHECK_ERROR("Kernel execution failed");
+/*
+    float * d_out;
 
+    // Map the buffer object to some pointer to pass in
+    cutilSafeCall(cudaGLMapBufferObject((void**)&d_out, pbo));
+
+    // Call the filtering kernel
+    medianFilter<<<gridDim, blockDim>>>
+        (d_out, d_unfilt, WINDOW_WIDTH, WINDOW_HEIGHT);
+
+    // Unmap the buffer object
+    cutilSafeCall(cudaGLUnmapBufferObject(pbo));
+*/
     numSamples++;
 }
  
@@ -278,6 +289,13 @@ int main(int argc, char** argv)
     cutilSafeCall(cudaMemset(d_out, 0, sizeof(GLfloat) * 4 * WINDOW_WIDTH * WINDOW_HEIGHT));
     cutilSafeCall(cudaGLUnmapBufferObject(pbo));
 
+    // Make some space to keep rolling unfiltered samples
+    cutilSafeCall(cudaMalloc((void**)&d_unfilt,
+                             sizeof(GLfloat) * 4
+                                             * WINDOW_WIDTH * WINDOW_HEIGHT));
+    cutilSafeCall(cudaMemset(d_unfilt, 0, sizeof(GLfloat) * 4
+                                            * WINDOW_WIDTH * WINDOW_HEIGHT));
+
     // Initialize some spheres
     spheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
     transSpheres = (Sphere*)malloc(sizeof(Sphere) * numSpheres);
@@ -312,18 +330,18 @@ int main(int argc, char** argv)
     spheres[4].radius = 9989;
     spheres[4].emissionCol = make_float3(0.0, 0.0, 0.0);
     spheres[4].reflectance  = make_float3(1.0, 1.0, 1.0);
-    spheres[4].materialType = MATERIAL_SPECULAR;
+    spheres[4].materialType = MATERIAL_DIFFUSE;
 
     spheres[5].center = make_float3(0, 10000, 0);
     spheres[5].radius = 9989;
     spheres[5].emissionCol = make_float3(0.0, .0, 0.0);
-    spheres[5].reflectance  = make_float3(.8, .8, .8);
-    spheres[5].materialType = MATERIAL_SPECULAR;
+    spheres[5].reflectance  = make_float3(.8, .4, .4);
+    spheres[5].materialType = MATERIAL_DIFFUSE;
 
     spheres[6].center = make_float3(0, -10000, 0);
     spheres[6].radius = 9999;
     spheres[6].emissionCol = make_float3(0.0, 0.0, 0.0);
-    spheres[6].reflectance  = make_float3(1.0, 1.0, 1.0);
+    spheres[6].reflectance  = make_float3(.5, 0.5, 0.5);
     spheres[6].materialType = MATERIAL_DIFFUSE;
 
     spheres[7].center = make_float3(0, 0, -10000);
@@ -335,7 +353,7 @@ int main(int argc, char** argv)
     spheres[8].center = make_float3(0, 0, 10000);
     spheres[8].radius = 9989;
     spheres[8].emissionCol = make_float3(0.0, .0, 0.0);
-    spheres[8].reflectance  = make_float3(1.0, 1.0, 1.0);
+    spheres[8].reflectance  = make_float3(0.0, 1.0, 1.0);
     spheres[8].materialType = MATERIAL_DIFFUSE;
 
 
